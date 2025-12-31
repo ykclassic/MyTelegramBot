@@ -4,4 +4,5 @@ numpy
 ccxt
 plotly
 websockets
-python-telegram-bot==20.9
+python-telegram-bot
+
