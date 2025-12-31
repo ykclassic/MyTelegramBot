@@ -1,0 +1,7 @@
+streamlit
+pandas
+numpy
+ccxt
+plotly
+websockets
+python-telegram-bot==20.9
