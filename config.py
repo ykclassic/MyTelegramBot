@@ -12,11 +12,12 @@ SUPPORTED_EXCHANGES = ["binance", "bitget", "gateio", "xt"]
 
 # ===== TRADING =====
 TRADING_PAIRS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",  # Your originals (add any others you have)
-    # New 13 based on volatility/volume
-    "DOGE/USDT", "TRX/USDT", "LINK/USDT", "AVAX/USDT", "TON/USDT",
-    "DOT/USDT", "MATIC/USDT", "SHIB/USDT", "UNI/USDT", "AAVE/USDT",
-    "NEAR/USDT", "HBAR/USDT", "SUI/USDT"
+    # Majors from early versions (including previously excluded)
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "LTC/USDT",
+    # High-volatility & high-volume additions
+    "DOGE/USDT", "SHIB/USDT", "PEPE/USDT", "TRX/USDT", "LINK/USDT",
+    "TON/USDT", "AVAX/USDT", "DOT/USDT", "MATIC/USDT", "UNI/USDT",
+    "AAVE/USDT", "NEAR/USDT", "SUI/USDT"
 ]
 
 TIMEFRAMES = ["5m", "15m", "1h", "4h"]
