@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 # =====================
 st.set_page_config(page_title="ProfitForge Demo", layout="wide")
 
-# Dummy Telegram credentials
+# Dummy Telegram credentials (replace with real ones if needed)
 TELEGRAM_BOT_TOKEN = "8367963721:AAH6B819_DevFNpZracbJ5EmHrDR3DKZeR4"
 TELEGRAM_CHAT_ID = "865482105"
 
@@ -67,7 +67,7 @@ def fetch_ohlcv(exchange_name, symbol, timeframe, limit=200):
         return pd.DataFrame()
 
 # =====================
-# INDICATORS
+# INDICATORS (unchanged)
 # =====================
 def rsi(df, period=14):
     delta = df["close"].diff()
@@ -99,7 +99,7 @@ def ichimoku(df):
     return df
 
 # =====================
-# SIGNAL ENGINE
+# SIGNAL ENGINE (unchanged)
 # =====================
 def generate_signal(df):
     df = rsi(df)
@@ -145,44 +145,72 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Sidebar inputs
+# Sidebar inputs (now fully interactive — no button needed)
 with st.sidebar:
-    exchange_name = st.selectbox("Select Exchange", EXCHANGES)
-    symbol = st.selectbox("Select Trading Pair", TRADING_PAIRS)
-    timeframe = st.selectbox("Select Timeframe", TIMEFRAMES)
-    generate_signal_btn = st.button("Generate Signal")
+    st.header("Settings")
+    selected_exchange = st.selectbox("Exchange", EXCHANGES)
+    selected_symbol = st.selectbox("Trading Pair", TRADING_PAIRS)
+    selected_timeframe = st.selectbox("Timeframe", TIMEFRAMES)
 
-# Main logic
-if generate_signal_btn:
-    df = fetch_ohlcv(exchange_name, symbol, timeframe)
-    if df.empty:
-        st.warning("No data available")
-    else:
-        signal, score, levels = generate_signal(df)
-        st.subheader("📊 Signal Summary")
-        st.write({
-            "Exchange": exchange_name,
-            "Signal": signal,
-            "Score": score,
-            "Entry": round(levels["entry"],4),
-            "Stop Loss": round(levels["sl"],4),
-            "Take Profit 1": round(levels["tp1"],4),
-            "Take Profit 2": round(levels["tp2"],4)
-        })
-        if signal != "HOLD":
-            send_telegram(
-                f"📢 Trade Signal\n\nExchange: {exchange_name}\nPair: {symbol}\nTF: {timeframe}\nSignal: {signal}\nEntry: {levels['entry']:.4f}\nSL: {levels['sl']:.4f}\nTP1: {levels['tp1']:.4f}\nTP2: {levels['tp2']:.4f}"
-            )
-        # Candlestick
-        fig = go.Figure(data=[go.Candlestick(
-            x=df.index[-100:], open=df["open"][-100:], high=df["high"][-100:],
-            low=df["low"][-100:], close=df["close"][-100:]
-        )])
-        fig.add_hline(y=levels["entry"], line_color="blue", line_dash="dot", annotation_text="Entry")
-        fig.add_hline(y=levels["sl"], line_color="red", line_dash="dot", annotation_text="SL")
-        fig.add_hline(y=levels["tp1"], line_color="green", line_dash="dot", annotation_text="TP1")
-        fig.add_hline(y=levels["tp2"], line_color="green", line_dash="dot", annotation_text="TP2")
-        fig.update_layout(height=400, xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig, use_container_width=True)
+# Auto-fetch and generate signal whenever selections change
+st.header(f"{selected_symbol} • {selected_exchange} • {selected_timeframe}")
 
-st.caption("ProfitForge • Demo Build • Not Financial Advice")
+with st.spinner("Fetching latest OHLCV data..."):
+    df = fetch_ohlcv(selected_exchange, selected_symbol, selected_timeframe, limit=300)
+
+if df.empty or len(df) < 100:
+    st.warning("Unable to fetch sufficient data. Try a different exchange, pair, or timeframe.")
+else:
+    signal, score, levels = generate_signal(df)
+
+    # Nice summary metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Signal", signal)
+    col2.metric("Score", score, delta=score - 50)
+    col3.metric("Entry", f"{levels['entry']:.4f}")
+    col4.metric("Stop Loss", f"{levels['sl']:.4f}")
+    col5.metric("TP2", f"{levels['tp2']:.4f}")
+
+    # Direction & RR
+    direction = "Long" if "BUY" in signal else "Short" if "SELL" in signal else "-"
+    rr = abs((levels["tp1"] - levels["entry"]) / (levels["entry"] - levels["sl"])) if direction != "-" else None
+    st.write(f"**Direction:** {direction} | **Risk:Reward (to TP1):** {rr:.2f if rr else '-'}")
+
+    # Optional Telegram alert (prevents spam on every rerun)
+    if signal != "HOLD":
+        alert_message = (
+            f"📢 *Trade Signal*\n\n"
+            f"*Exchange:* {selected_exchange}\n"
+            f"*Pair:* {selected_symbol}\n"
+            f"*Timeframe:* {selected_timeframe}\n"
+            f"*Signal:* {signal}\n"
+            f"*Score:* {score}\n"
+            f"*Entry:* {levels['entry']:.4f}\n"
+            f"*SL:* {levels['sl']:.4f}\n"
+            f"*TP1:* {levels['tp1']:.4f}\n"
+            f"*TP2:* {levels['tp2']:.4f}"
+        )
+        if st.button("📲 Send Telegram Alert"):
+            send_telegram(alert_message)
+            st.success("Alert sent!")
+
+    # Candlestick chart
+    st.subheader("Chart with Key Levels")
+    fig = go.Figure(data=[go.Candlestick(
+        x=df.index[-200:],
+        open=df["open"][-200:],
+        high=df["high"][-200:],
+        low=df["low"][-200:],
+        close=df["close"][-200:]
+    )])
+
+    fig.add_hline(y=levels["entry"], line_color="blue", line_dash="dot", annotation_text="Entry")
+    fig.add_hline(y=levels["sl"], line_color="red", line_dash="dot", annotation_text="SL")
+    fig.add_hline(y=levels["tp1"], line_color="green", line_dash="dot", annotation_text="TP1")
+    fig.add_hline(y=levels["tp2"], line_color="lime", line_dash="dot", annotation_text="TP2")
+
+    fig.update_layout(height=600, xaxis_rangeslider_visible=False, title=f"{selected_symbol} {selected_timeframe}")
+    st.plotly_chart(fig, use_container_width=True)
+
+    last_update = df.index[-1].strftime("%Y-%m-%d %H:%M UTC")
+    st.caption(f"Last candle: {last_update} • Data cached for up to 5 minutes • Demo only • Not financial advice")
