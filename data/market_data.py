@@ -37,13 +37,17 @@ def fetch_ohlcv(exchange_id, symbol, timeframe="1h", limit=500):
             return pd.DataFrame()
         # ===============================
 
-        # Create DataFrame
+                # Create DataFrame
         df = pd.DataFrame(
             data,
             columns=["timestamp", "open", "high", "low", "close", "volume"]
         )
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         df.set_index("timestamp", inplace=True)
+
+        # === CRITICAL FIX: Force lowercase column names for consistency ===
+        df.columns = df.columns.str.lower()
+        # ==================================================================
 
         return df
 
