@@ -17,8 +17,8 @@ def generate_signal(df, params):
     cloud_top = max(last["SpanA"], last["SpanB"])
     cloud_bottom = min(last["SpanA"], last["SpanB"])
 
-    if last["Close"] > cloud_top: score += 15
-    if last["Close"] < cloud_bottom: score -= 15
+    if last["close"] > cloud_top: score += 15
+    if last["close"] < cloud_bottom: score -= 15
 
     if score >= 80: signal = "STRONG BUY"
     elif score >= 65: signal = "BUY"
@@ -26,7 +26,7 @@ def generate_signal(df, params):
     elif score <= 35: signal = "SELL"
     else: signal = "HOLD"
 
-    entry = last["Close"]
+    entry = last["close"]
     atr_val = last["ATR"]
 
     return signal, score, {
