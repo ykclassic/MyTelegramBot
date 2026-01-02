@@ -5,4 +5,5 @@ ccxt
 plotly
 websockets
 python-telegram-bot
+requests
 
