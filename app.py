@@ -3,7 +3,7 @@ from pathlib import Path
 # Add the project root directory to Python path 
 sys.path.insert(0, str(Path(__file__).parent.resolve()))
 import streamlit as st
-from config import APP_NMAE, SUPPORTED_EXCHANGES, TRADING_PAIRS, TIMEFRAMES, PARAM_GRID
+from config import APP_NAME, SUPPORTED_EXCHANGES, TRADING_PAIRS, TIMEFRAMES, PARAM_GRID
 from data.market_data import fetch_ohlcv
 from signals.generator import generate_signal
 from backtest.engine import backtest
