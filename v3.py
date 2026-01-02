@@ -37,8 +37,7 @@ def send_telegram(message: str):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
     try:
-        response = requests.post(url, json=payload, timeout=10)
-        st.write("📡 Telegram Status:", response.status_code)
+        requests.post(url, json=payload, timeout=10)
     except Exception as e:
         st.error(f"Telegram Exception: {e}")
 
@@ -146,18 +145,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Sidebar selections
+# Sidebar inputs
 with st.sidebar:
-    exchange_name = st.selectbox("Exchange", EXCHANGES)
-    symbol = st.selectbox("Trading Pair", TRADING_PAIRS)
-    timeframe = st.selectbox("Timeframe", TIMEFRAMES)
+    exchange_name = st.selectbox("Select Exchange", EXCHANGES)
+    symbol = st.selectbox("Select Trading Pair", TRADING_PAIRS)
+    timeframe = st.selectbox("Select Timeframe", TIMEFRAMES)
     generate_signal_btn = st.button("Generate Signal")
 
-# Generate signal
+# Main logic
 if generate_signal_btn:
     df = fetch_ohlcv(exchange_name, symbol, timeframe)
     if df.empty:
-        st.warning("No data available.")
+        st.warning("No data available")
     else:
         signal, score, levels = generate_signal(df)
         st.subheader("📊 Signal Summary")
