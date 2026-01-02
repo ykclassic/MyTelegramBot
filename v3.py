@@ -1,5 +1,5 @@
 # =========================================================
-# PROFITFORGE – SINGLE FILE DEMO WITH SESSION COLORS
+# PROFITFORGE – SINGLE FILE DEMO (XT + Bitget + Gate.io)
 # =========================================================
 
 import streamlit as st
@@ -68,17 +68,26 @@ def send_telegram(message: str):
 # =========================================================
 
 @st.cache_data(ttl=300)
-def fetch_ohlcv(symbol, timeframe, limit=200):
-    exchange = ccxt.binance()
-    exchange.enableRateLimit = True
+def fetch_ohlcv(exchange_name, symbol, timeframe, limit=200):
+    """Fetch OHLCV data from selected exchange"""
+    exchanges = {
+        "XT": ccxt.xt(),
+        "Bitget": ccxt.bitget(),
+        "Gate.io": ccxt.gateio()
+    }
+    exchange = exchanges.get(exchange_name)
+    if not exchange:
+        st.warning(f"{exchange_name} not supported")
+        return pd.DataFrame()
     try:
+        exchange.enableRateLimit = True
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         df.set_index("timestamp", inplace=True)
         return df
     except Exception as e:
-        st.warning(f"Data fetch error: {e}")
+        st.warning(f"{exchange_name} fetch error: {e}")
         return pd.DataFrame()
 
 # =========================================================
@@ -172,12 +181,13 @@ st.markdown(
 )
 
 # User inputs
+exchange_name = st.selectbox("Exchange", ["XT", "Bitget", "Gate.io"])
 symbol = st.selectbox("Trading Pair", TRADING_PAIRS)
 timeframe = st.selectbox("Timeframe", TIMEFRAMES)
 
 # Generate Signal
 if st.button("Generate Signal"):
-    df = fetch_ohlcv(symbol, timeframe)
+    df = fetch_ohlcv(exchange_name, symbol, timeframe)
     if df.empty:
         st.warning("No data available.")
     else:
@@ -198,6 +208,7 @@ if st.button("Generate Signal"):
         if signal != "HOLD":
             send_telegram(
                 f"📢 Trade Signal\n\n"
+                f"Exchange: {exchange_name}\n"
                 f"Pair: {symbol}\nTF: {timeframe}\n"
                 f"Signal: {signal}\n"
                 f"Entry: {levels['entry']:.4f}\n"
