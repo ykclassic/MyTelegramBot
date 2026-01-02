@@ -1,7 +1,7 @@
 import sys 
 from pathlib import Path 
 # Add the project root directory to Python path 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.resolve()))
 import streamlit as st
 from config import *
 from data.market_data import fetch_ohlcv
