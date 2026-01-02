@@ -14,17 +14,16 @@ st.set_page_config(page_title="ProfitForge Demo", layout="wide")
 TELEGRAM_BOT_TOKEN = "8367963721:AAH6B819_DevFNpZracbJ5EmHrDR3DKZeR4"
 TELEGRAM_CHAT_ID = "865482105"
 
-# Popular exchanges
-EXCHANGES = ["Binance", "OKX", "Bybit", "Bitget", "Gate.io", "XT.COM"]
+# Prioritized exchanges — XT.COM first (replaced Binance with XT as primary)
+EXCHANGES = ["XT.COM", "OKX", "Bybit", "Bitget", "Gate.io"]
 
 # CCXT exchange ID mapping
 ex_ids = {
-    "Binance": "binance",
+    "XT.COM": "xt",
     "OKX": "okx",
     "Bybit": "bybit",
     "Bitget": "bitget",
     "Gate.io": "gate",
-    "XT.COM": "xt",
 }
 
 # Fallback pairs
@@ -90,12 +89,12 @@ def load_available_symbols(exchange_name: str):
             symbol = f"{base}/USDT"
             if symbol in exchange.markets:
                 market = exchange.markets[symbol]
-                if market.get("active") and market.get("spot"):
+                if market.get("active", True) and market.get("spot", True):
                     symbols.append(symbol)
-        return sorted(symbols)
+        return sorted(symbols) or FALLBACK_PAIRS
     except Exception as e:
         st.warning(f"Could not load markets for {exchange_name}: {e}")
-        return []
+        return FALLBACK_PAIRS
 
 # =====================
 # FETCH DATA
@@ -104,7 +103,6 @@ def load_available_symbols(exchange_name: str):
 def fetch_ohlcv(exchange_name, symbol, timeframe, limit=1000):
     ex_id = ex_ids.get(exchange_name)
     if not ex_id:
-        st.warning(f"{exchange_name} not supported")
         return pd.DataFrame()
     try:
         exchange_class = getattr(ccxt, ex_id)
@@ -122,7 +120,7 @@ def fetch_ohlcv(exchange_name, symbol, timeframe, limit=1000):
         return pd.DataFrame()
 
 # =====================
-# INDICATORS & SIGNAL (same as before)
+# INDICATORS & SIGNAL
 # =====================
 def rsi(df, period=14):
     delta = df["close"].diff()
@@ -165,24 +163,18 @@ def generate_signal(df):
     score = 50
     
     if pd.notna(last["RSI"]):
-        if last["RSI"] < 30:
-            score += 20
-        if last["RSI"] > 70:
-            score -= 20
+        if last["RSI"] < 30: score += 20
+        if last["RSI"] > 70: score -= 20
     
     if pd.notna(last["MACD"]) and pd.notna(last["MACD_Signal"]):
-        if last["MACD"] > last["MACD_Signal"]:
-            score += 15
-        if last["MACD"] < last["MACD_Signal"]:
-            score -= 15
+        if last["MACD"] > last["MACD_Signal"]: score += 15
+        if last["MACD"] < last["MACD_Signal"]: score -= 15
     
     if pd.notna(last["SpanA"]) and pd.notna(last["SpanB"]):
         cloud_top = max(last["SpanA"], last["SpanB"])
         cloud_bottom = min(last["SpanA"], last["SpanB"])
-        if last["close"] > cloud_top:
-            score += 15
-        if last["close"] < cloud_bottom:
-            score -= 15
+        if last["close"] > cloud_top: score += 15
+        if last["close"] < cloud_bottom: score -= 15
     
     if score >= 80:
         signal = "STRONG BUY"
@@ -221,20 +213,16 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Create one tab per exchange
+# Exchange tabs (XT.COM first)
 tabs = st.tabs(EXCHANGES)
 
 for idx, tab in enumerate(tabs):
     with tab:
         selected_exchange = EXCHANGES[idx]
+        st.subheader(selected_exchange)
         
-        st.subheader(f"{selected_exchange}")
-        
-        # Load available symbols for this exchange
+        # Load symbols
         available_symbols = load_available_symbols(selected_exchange)
-        if not available_symbols:
-            available_symbols = FALLBACK_PAIRS
-            st.info("Markets unavailable — using fallback pairs")
         
         col_a, col_b = st.columns([2, 1])
         with col_a:
@@ -252,35 +240,31 @@ for idx, tab in enumerate(tabs):
         
         st.markdown("---")
         
-        st.write(f"**{selected_symbol} • {selected_timeframe}**")
-        
-        with st.spinner("Fetching latest OHLCV data..."):
-            df = fetch_ohlcv(selected_exchange, selected_symbol, selected_timeframe, limit=1000)
+        with st.spinner("Fetching data from exchange..."):
+            df = fetch_ohlcv(selected_exchange, selected_symbol, selected_timeframe)
         
         if df.empty or len(df) < 100:
-            st.warning("Unable to fetch sufficient data. Try another pair or timeframe.")
+            st.error("Failed to fetch data — try another pair/timeframe.")
         else:
             signal, score, levels = generate_signal(df)
             
-            # Metrics
             col1, col2, col3, col4, col5 = st.columns(5)
             col1.metric("Signal", signal)
-            col2.metric("Score", score, delta=score - 50)
+            col2.metric("Score", score, delta=score-50)
             col3.metric("Entry", f"{levels['entry']:.4f}")
             col4.metric("Stop Loss", f"{levels['sl']:.4f}")
             col5.metric("TP2", f"{levels['tp2']:.4f}")
             
             direction = "Long" if "BUY" in signal else "Short" if "SELL" in signal else "-"
             rr = abs((levels["tp1"] - levels["entry"]) / (levels["entry"] - levels["sl"])) if direction != "-" else None
-            st.write(f"**Direction:** {direction} | **Risk:Reward (to TP1):** {rr:.2f if rr else '-'}")
+            st.write(f"**Direction:** {direction} | **RR (TP1):** {rr:.2f if rr else '-'}")
             
-            # Telegram alert
             if signal != "HOLD":
                 alert_message = (
                     f"📢 *Trade Signal*\n\n"
                     f"*Exchange:* {selected_exchange}\n"
                     f"*Pair:* {selected_symbol}\n"
-                    f"*Timeframe:* {selected_timeframe}\n"
+                    f"*TF:* {selected_timeframe}\n"
                     f"*Signal:* {signal}\n"
                     f"*Score:* {score}\n"
                     f"*Entry:* {levels['entry']:.4f}\n"
@@ -288,12 +272,11 @@ for idx, tab in enumerate(tabs):
                     f"*TP1:* {levels['tp1']:.4f}\n"
                     f"*TP2:* {levels['tp2']:.4f}"
                 )
-                if st.button("📲 Send Telegram Alert", key=f"alert_{idx}"):
+                if st.button("📲 Send Alert", key=f"alert_{idx}"):
                     send_telegram(alert_message)
-                    st.success("Alert sent!")
+                    st.success("Sent!")
             
-            # Chart
-            st.subheader("Chart with Key Levels")
+            st.subheader("Chart")
             fig = go.Figure(data=[go.Candlestick(
                 x=df.index[-200:],
                 open=df["open"][-200:],
@@ -308,8 +291,8 @@ for idx, tab in enumerate(tabs):
             fig.add_hline(y=levels["tp2"], line_color="lime", line_dash="dot", annotation_text="TP2")
             
             fig.update_layout(height=600, xaxis_rangeslider_visible=False,
-                              title=f"{selected_symbol} {selected_timeframe}")
+                              title=f"{selected_symbol} {selected_timeframe} — {selected_exchange}")
             st.plotly_chart(fig, use_container_width=True)
             
             last_update = df.index[-1].strftime("%Y-%m-%d %H:%M UTC")
-            st.caption(f"Last candle: {last_update} • Data cached for up to 5 minutes • Demo only • Not financial advice")
+            st.caption(f"Last candle: {last_update} • Demo only • Not financial advice")
