@@ -1,7 +1,7 @@
 import os
 
 # ===== GENERAL =====
-APP_NAME = "ProfitForge Pro v10"
+APP_NAME = "ProfitForge.....forging maximum profit into your wallets"
 
 # ===== TELEGRAM =====
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
