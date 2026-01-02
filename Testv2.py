@@ -1,6 +1,6 @@
-# ================================
-# PROFITFORGE — SINGLE FILE VERSION
-# ================================
+# =========================================================
+# PROFITFORGE – SINGLE FILE VERSION (STABLE DEMO BUILD)
+# =========================================================
 
 import streamlit as st
 import ccxt
@@ -8,135 +8,118 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime
-import plotly.graph_objects as go
 
-# ================================
+# =========================================================
 # CONFIG
-# ================================
+# =========================================================
 
-APP_NAME = "ProfitForge Pro (Single File Demo)"
+st.set_page_config(page_title="ProfitForge – Demo", layout="wide")
 
-# ⚠️ DUMMY / PLACEHOLDER CREDENTIALS (FOR DEMO PURPOSES ONLY)
-TELEGRAM_TOKEN = "123456789:DEMO_FAKE_TELEGRAM_TOKEN"
-TELEGRAM_CHAT_ID = "000000000"
+# --- Dummy Telegram Credentials (for demo only) ---
+TELEGRAM_BOT_TOKEN = "123456789:DEMO_TELEGRAM_TOKEN"
+TELEGRAM_CHAT_ID = "123456789"
 
-TRADING_PAIRS = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT",
-    "BNB/USDT", "XRP/USDT"
-]
-
-TIMEFRAMES = ["15m", "1h", "4h"]
-
-# ================================
+# =========================================================
 # TELEGRAM
-# ================================
+# =========================================================
 
-def send_telegram(message):
-    """
-    Dummy-safe Telegram sender.
-    Will fail silently if token is invalid.
-    """
+def send_telegram(message: str):
     try:
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            data={
-                "chat_id": TELEGRAM_CHAT_ID,
-                "text": message
-            },
-            timeout=5
-        )
-    except:
-        pass
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": "Markdown"
+        }
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        st.warning(f"Telegram error: {e}")
 
-
-# ================================
+# =========================================================
 # MARKET DATA
-# ================================
+# =========================================================
 
-@st.cache_data(ttl=300)
-def fetch_ohlcv(exchange_id, symbol, timeframe, limit=300):
-    exchange = getattr(ccxt, exchange_id)()
-    exchange.enableRateLimit = True
+def fetch_ohlcv(symbol, timeframe, limit=200):
+    exchange = ccxt.binance()
+    data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+    df = pd.DataFrame(data, columns=[
+        "timestamp", "open", "high", "low", "close", "volume"
+    ])
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+    return df
 
-    try:
-        data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(
-            data,
-            columns=["time", "Open", "High", "Low", "Close", "Volume"]
-        )
-        df["time"] = pd.to_datetime(df["time"], unit="ms", utc=True)
-        df.set_index("time", inplace=True)
-        return df
-    except:
-        return pd.DataFrame()
-
-
-# ================================
+# =========================================================
 # INDICATORS
-# ================================
+# =========================================================
 
 def rsi(df, period=14):
-    delta = df["Close"].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.ewm(alpha=1/period, min_periods=period).mean()
-    avg_loss = loss.ewm(alpha=1/period, min_periods=period).mean()
-
-    rs = avg_gain / avg_loss
+    delta = df["close"].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(period).mean()
+    rs = gain / loss
     df["RSI"] = 100 - (100 / (1 + rs))
     return df
 
-
-def macd(df, fast=12, slow=26, signal=9):
-    fast_ema = df["Close"].ewm(span=fast, adjust=False).mean()
-    slow_ema = df["Close"].ewm(span=slow, adjust=False).mean()
-    df["MACD"] = fast_ema - slow_ema
-    df["MACD_Signal"] = df["MACD"].ewm(span=signal, adjust=False).mean()
+def macd(df):
+    exp1 = df["close"].ewm(span=12, adjust=False).mean()
+    exp2 = df["close"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = exp1 - exp2
+    df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
     return df
-
 
 def atr(df, period=14):
-    hl = df["High"] - df["Low"]
-    hc = (df["High"] - df["Close"].shift()).abs()
-    lc = (df["Low"] - df["Close"].shift()).abs()
-    tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
-    df["ATR"] = tr.rolling(period).mean()
+    high_low = df["high"] - df["low"]
+    high_close = np.abs(df["high"] - df["close"].shift())
+    low_close = np.abs(df["low"] - df["close"].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    df["ATR"] = ranges.max(axis=1).rolling(period).mean()
     return df
-
 
 def ichimoku(df):
-    df["Conv"] = (df["High"].rolling(9).max() + df["Low"].rolling(9).min()) / 2
-    df["Base"] = (df["High"].rolling(26).max() + df["Low"].rolling(26).min()) / 2
-    df["SpanA"] = ((df["Conv"] + df["Base"]) / 2).shift(26)
-    df["SpanB"] = ((df["High"].rolling(52).max() + df["Low"].rolling(52).min()) / 2).shift(26)
+    high9 = df["high"].rolling(9).max()
+    low9 = df["low"].rolling(9).min()
+    df["Tenkan"] = (high9 + low9) / 2
+
+    high26 = df["high"].rolling(26).max()
+    low26 = df["low"].rolling(26).min()
+    df["Kijun"] = (high26 + low26) / 2
+
+    df["SpanA"] = ((df["Tenkan"] + df["Kijun"]) / 2).shift(26)
+    df["SpanB"] = ((df["high"].rolling(52).max() +
+                     df["low"].rolling(52).min()) / 2).shift(26)
     return df
 
-
-# ================================
-# SIGNAL ENGINE
-# ================================
+# =========================================================
+# SIGNAL ENGINE (FIXED)
+# =========================================================
 
 def generate_signal(df):
-    df = atr(df)
     df = rsi(df)
     df = macd(df)
+    df = atr(df)
     df = ichimoku(df)
 
     last = df.iloc[-1]
     score = 50
 
-    if last["RSI"] < 30: score += 20
-    if last["RSI"] > 70: score -= 20
-    if last["MACD"] > last["MACD_Signal"]: score += 15
-    if last["MACD"] < last["MACD_Signal"]: score -= 15
+    if last["RSI"] < 30:
+        score += 20
+    if last["RSI"] > 70:
+        score -= 20
+    if last["MACD"] > last["MACD_Signal"]:
+        score += 15
+    if last["MACD"] < last["MACD_Signal"]:
+        score -= 15
 
     cloud_top = max(last["SpanA"], last["SpanB"])
     cloud_bottom = min(last["SpanA"], last["SpanB"])
 
-    if last["Close"] > cloud_top: score += 15
-    if last["Close"] < cloud_bottom: score -= 15
+    if last["close"] > cloud_top:
+        score += 15
+    if last["close"] < cloud_bottom:
+        score -= 15
 
+    # SIGNAL TYPE
     if score >= 80:
         signal = "STRONG BUY"
     elif score >= 65:
@@ -148,57 +131,64 @@ def generate_signal(df):
     else:
         signal = "HOLD"
 
+    entry = last["close"]
     atr_val = last["ATR"]
-    entry = last["Close"]
 
-    return signal, score, {
+    levels = {
         "entry": entry,
         "sl": entry - atr_val * 2 if "BUY" in signal else entry + atr_val * 2,
         "tp1": entry * 1.03 if "BUY" in signal else entry * 0.97,
         "tp2": entry * 1.06 if "BUY" in signal else entry * 0.94
     }
 
+    return signal, score, levels
 
-# ================================
-# STREAMLIT UI
-# ================================
+# =========================================================
+# UI
+# =========================================================
 
-st.set_page_config(APP_NAME, layout="wide")
-st.title(APP_NAME)
+st.title("🔥 ProfitForge — Signal Engine (Demo)")
 
-exchange = st.selectbox("Exchange", ["binance", "bitget", "gateio"])
-symbols = st.multiselect("Symbols", TRADING_PAIRS, default=["BTC/USDT"])
-timeframes = st.multiselect("Timeframes", TIMEFRAMES, default=["1h"])
+symbol = st.selectbox("Trading Pair", ["BTC/USDT", "ETH/USDT"])
+timeframe = st.selectbox("Timeframe", ["5m", "15m", "1h", "4h"])
 
-for symbol in symbols:
-    for tf in timeframes:
-        df = fetch_ohlcv(exchange, symbol, tf)
-        if df.empty:
-            st.warning(f"No data for {symbol} ({tf})")
-            continue
+if st.button("Generate Signal"):
 
-        signal, score, levels = generate_signal(df)
+    df = fetch_ohlcv(symbol, timeframe)
+    signal, score, levels = generate_signal(df)
 
-        st.subheader(f"{symbol} — {tf}")
-        st.write(f"Signal: **{signal}** | Score: `{score}`")
+    st.subheader("📊 Signal Summary")
 
-        if "BUY" in signal or "SELL" in signal:
-            send_telegram(
-                f"{symbol} {tf}\nSignal: {signal}\nEntry: {levels['entry']:.2f}"
-            )
+    st.write({
+        "Signal": signal,
+        "Score": score,
+        "Entry": round(levels["entry"], 4),
+        "Stop Loss": round(levels["sl"], 4),
+        "Take Profit 1": round(levels["tp1"], 4),
+        "Take Profit 2": round(levels["tp2"], 4),
+    })
 
-        fig = go.Figure()
-        fig.add_candlestick(
-            x=df.index,
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"]
+    # Send Telegram Alert (only actionable)
+    if signal != "HOLD":
+        send_telegram(
+            f"""
+📊 *Trade Signal*
+
+Pair: {symbol}
+TF: {timeframe}
+
+Signal: {signal}
+Entry: {levels['entry']:.4f}
+SL: {levels['sl']:.4f}
+TP1: {levels['tp1']:.4f}
+TP2: {levels['tp2']:.4f}
+"""
         )
 
-        fig.add_hline(y=levels["entry"], line_dash="dot", line_color="blue")
-        fig.add_hline(y=levels["sl"], line_dash="dot", line_color="red")
-        fig.add_hline(y=levels["tp1"], line_dash="dot", line_color="green")
+    st.success("Signal processed successfully.")
 
-        fig.update_layout(height=400, xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig, use_container_width=True)
+# =========================================================
+# FOOTER
+# =========================================================
+
+st.caption("ProfitForge • Demo Build • Not Financial Advice")
