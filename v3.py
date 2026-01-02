@@ -45,18 +45,24 @@ def send_telegram(message: str):
 # FETCH DATA
 # =====================
 @st.cache_data(ttl=300)
-def fetch_ohlcv(exchange_name, symbol, timeframe, limit=200):
-    exchanges = {
-        "XT": ccxt.xt(),
-        "Bitget": ccxt.bitget(),
-        "Gate.io": ccxt.gateio()
+def fetch_ohlcv(exchange_name, symbol, timeframe, limit=300):
+    # Correct ccxt exchange IDs (this was the main bug for Gate.io)
+    ex_ids = {
+        "XT": "xt",
+        "Bitget": "bitget",
+        "Gate.io": "gate"  # Correct ID is 'gate', not 'gateio'
     }
-    exchange = exchanges.get(exchange_name)
-    if not exchange:
+    ex_id = ex_ids.get(exchange_name)
+    if not ex_id:
         st.warning(f"{exchange_name} not supported")
         return pd.DataFrame()
+
     try:
-        exchange.enableRateLimit = True
+        exchange_class = getattr(ccxt, ex_id)
+        exchange = exchange_class({
+            'enableRateLimit': True,
+            # 'options': {'defaultType': 'spot'},  # Uncomment if needed for spot markets
+        })
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
@@ -145,25 +151,29 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Sidebar inputs (now fully interactive — no button needed)
+# Sidebar inputs (fully interactive)
 with st.sidebar:
     st.header("Settings")
     selected_exchange = st.selectbox("Exchange", EXCHANGES)
     selected_symbol = st.selectbox("Trading Pair", TRADING_PAIRS)
     selected_timeframe = st.selectbox("Timeframe", TIMEFRAMES)
 
-# Auto-fetch and generate signal whenever selections change
+# Auto-fetch and generate signal
 st.header(f"{selected_symbol} • {selected_exchange} • {selected_timeframe}")
 
 with st.spinner("Fetching latest OHLCV data..."):
     df = fetch_ohlcv(selected_exchange, selected_symbol, selected_timeframe, limit=300)
 
 if df.empty or len(df) < 100:
-    st.warning("Unable to fetch sufficient data. Try a different exchange, pair, or timeframe.")
+    st.warning("Unable to fetch sufficient data. Possible causes:\n"
+               "- The selected pair is not available on this exchange\n"
+               "- Timeframe not supported\n"
+               "- Temporary API issue\n"
+               "Try a different exchange, pair, or timeframe.")
 else:
     signal, score, levels = generate_signal(df)
 
-    # Nice summary metrics
+    # Summary metrics
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Signal", signal)
     col2.metric("Score", score, delta=score - 50)
@@ -176,7 +186,7 @@ else:
     rr = abs((levels["tp1"] - levels["entry"]) / (levels["entry"] - levels["sl"])) if direction != "-" else None
     st.write(f"**Direction:** {direction} | **Risk:Reward (to TP1):** {rr:.2f if rr else '-'}")
 
-    # Optional Telegram alert (prevents spam on every rerun)
+    # Optional Telegram alert
     if signal != "HOLD":
         alert_message = (
             f"📢 *Trade Signal*\n\n"
