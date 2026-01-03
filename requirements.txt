@@ -6,4 +6,7 @@ plotly
 websockets
 python-telegram-bot
 requests
+openai
+openai>=1.0.0
+google-generativeai
 
