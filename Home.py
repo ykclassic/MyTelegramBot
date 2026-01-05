@@ -27,14 +27,22 @@ Choose a tool from the sidebar to begin. Here is a quick overview of what you'll
 """)
 
 # Creating a 3-column layout for a dashboard feel
-col1, col2, = st.columns(2)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.info("#### 📈 App One")
+    st.info("#### 📈 ForgV1")
     st.write("Description of your first app. Great for data analysis or specific tasks.")
 
 with col2:
-    st.success("#### 🤖 App Two")
+    st.success("#### 🤖 Forgev2")
+    st.write("Description of your second app. Powered by OpenAI/LLMs.")
+
+with col3:
+    st.success("#### 🤖 Forgev3")
+    st.write("Description of your second app. Powered by OpenAI/LLMs.")
+
+with col4:
+    st.success("#### 🤖 Forgev4")
     st.write("Description of your second app. Powered by OpenAI/LLMs.")
 
 st.write("---")
